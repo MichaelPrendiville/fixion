@@ -1522,7 +1522,8 @@ function buildBody(r, id) {
     if (iss.length) h += "<div class=\"summary-text\" style=\"font-size:11px;opacity:0.6;margin-bottom:8px;\">Note: highlighted text shows approximately where the error appears — check the suggestion for the correct spelling.</div>";
     iss.forEach(function(i) {
       var langTag = i.lang && i.lang.toLowerCase() !== "english" ? "<span class=\"lang-tag\">" + esc(i.lang) + "</span>" : "";
-      var pageUrl = i.foundOn ? (url.replace(/\/$/, "") + i.foundOn) : "";
+      var siteUrl = Object.keys(S).find(function(u) { return cid(u) === id; }) || "";
+      var pageUrl = i.foundOn ? (siteUrl.replace(/\/$/, "") + i.foundOn) : "";
       var foundOnTag = i.foundOn ? "<a href=\"" + esc(pageUrl) + "\" target=\"_blank\" class=\"found-on-tag\">" + esc(i.foundOn) + " ↗</a>" : "";
       var sentenceRow = i.sentence ? "<div class=\"issue-sentence\">\u201c" + esc(i.sentence) + "\u201d</div>" : "";
       h += "<div class=\"issue-row\"><div class=\"issue-glyph\">" + (GL[i.type] || "◎") + "</div><div class=\"issue-body\"><div><span class=\"issue-orig\">" + esc(i.original) + "</span>" + langTag + foundOnTag + "</div><div class=\"issue-fix\">→ " + esc(i.suggestion) + "</div>" + sentenceRow + "<div class=\"issue-why\">" + esc(i.context) + "</div></div></div>";

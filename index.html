@@ -776,6 +776,9 @@ function exText(html) {
 
 function exSameOriginLinks(html, base) {
   var origin = new URL(base).origin;
+  // Normalise origin — strip www. for comparison so pier21.com.au matches www.pier21.com.au
+  var normOrigin = function(o) { return o.replace(/^(https?:\/\/)www\./, "$1"); };
+  var baseNorm = normOrigin(origin);
   var d = document.createElement("div");
   d.innerHTML = html;
   var s = new Set();
@@ -785,7 +788,7 @@ function exSameOriginLinks(html, base) {
     if (!n) return;
     try {
       var u = new URL(n);
-      if (u.origin === origin && !n.toLowerCase().includes(".pdf") && !n.includes("#")) {
+      if (normOrigin(u.origin) === baseNorm && !n.toLowerCase().includes(".pdf") && !n.includes("#")) {
         s.add(u.origin + u.pathname + u.search);
       }
     } catch(e) {}
@@ -876,6 +879,8 @@ function updateCrawlStatus(label) {
 
 async function crawlSite(entryUrl) {
   var origin   = new URL(entryUrl).origin;
+  // After redirect, actual origin may have www. prefix — track both
+  var normOrigin = function(o) { return o.replace(/^(https?:\/\/)www\./, "$1"); };
   var visited  = new Set();
   var queue    = [entryUrl];
   var allPdfs  = new Map();

@@ -791,7 +791,12 @@ function exSameOriginLinks(html, base) {
     } catch(e) {}
   }
 
-  // Standard anchor links
+  // Prioritise nav/menu links first — most likely to contain site pages
+  d.querySelectorAll("nav a[href], header a[href], [class*='menu'] a[href], [class*='nav'] a[href], [id*='menu'] a[href], [id*='nav'] a[href]").forEach(function(a) {
+    addUrl(a.getAttribute("href"));
+  });
+
+  // Then all other anchor links
   d.querySelectorAll("a[href]").forEach(function(a) { addUrl(a.getAttribute("href")); });
 
   // Links in data attributes (e.g. data-href, data-url, data-link)
@@ -879,21 +884,51 @@ async function crawlSite(entryUrl) {
   var allText  = "";
   var pageTexts = []; // [{url, text}]
 
-  // Try fetching sitemap.xml to discover pages — more reliable than link crawling
+  // Step 1: Try robots.txt to find sitemap URL
   try {
-    var sitemapUrl = origin + "/sitemap.xml";
-    var sitemapHtml = await proxyFetch(sitemapUrl);
-    if (sitemapHtml && sitemapHtml.includes("<loc>")) {
-      var locMatches = sitemapHtml.match(/<loc>([^<]+)<\/loc>/g) || [];
-      locMatches.forEach(function(loc) {
-        var u = loc.replace(/<\/?loc>/g, "").trim();
-        if (u.startsWith(origin) && !u.toLowerCase().includes(".pdf") && !u.includes("#")) {
-          if (!queue.includes(u)) queue.push(u);
+    var robotsTxt = await proxyFetch(origin + "/robots.txt");
+    if (robotsTxt) {
+      var sitemapLine = robotsTxt.match(/Sitemap:\s*(.+)/i);
+      if (sitemapLine && sitemapLine[1]) {
+        var robotsSitemapUrl = sitemapLine[1].trim();
+        var robotsSitemap = await proxyFetch(robotsSitemapUrl);
+        if (robotsSitemap && robotsSitemap.includes("<loc>")) {
+          (robotsSitemap.match(/<loc>([^<]+)<\/loc>/g) || []).forEach(function(loc) {
+            var u = loc.replace(/<\/?loc>/g, "").trim();
+            if (u.startsWith(origin) && !u.toLowerCase().includes(".pdf") && !u.includes("#")) {
+              if (!queue.includes(u)) queue.push(u);
+            }
+          });
+          console.log("robots.txt sitemap found:", queue.length, "URLs");
         }
-      });
-      console.log("Sitemap found:", locMatches.length, "URLs");
+      }
     }
-  } catch(e) { console.log("No sitemap found"); }
+  } catch(e) {}
+
+  // Step 2: Try common sitemap locations if queue still small
+  if (queue.length < 3) {
+    var sitemapUrls = [
+      origin + "/sitemap.xml",
+      origin + "/sitemap_index.xml",
+      origin + "/wp-sitemap.xml",
+      origin + "/page-sitemap.xml"
+    ];
+    for (var si = 0; si < sitemapUrls.length; si++) {
+      try {
+        var sm = await proxyFetch(sitemapUrls[si]);
+        if (sm && sm.includes("<loc>")) {
+          (sm.match(/<loc>([^<]+)<\/loc>/g) || []).forEach(function(loc) {
+            var u = loc.replace(/<\/?loc>/g, "").trim();
+            if (u.startsWith(origin) && !u.toLowerCase().includes(".pdf") && !u.includes("#")) {
+              if (!queue.includes(u)) queue.push(u);
+            }
+          });
+          console.log("Sitemap found at", sitemapUrls[si], ":", queue.length, "URLs");
+          break;
+        }
+      } catch(e) {}
+    }
+  }
 
   while (queue.length > 0 && visited.size < MAX_PAGES) {
     var pageUrl = queue.shift();

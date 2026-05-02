@@ -516,7 +516,7 @@ footer{
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-var MAX_PAGES  = 20;
+var MAX_PAGES  = 50;
 var MAX_PDFS   = 20;
 var WORKER_URL = "https://damp-star-da32.michael-d15.workers.dev";
 var API_URL    = WORKER_URL || "https://api.anthropic.com/v1/messages";
@@ -979,7 +979,10 @@ async function crawlSite(entryUrl) {
 
     var pageText = exText(html);
     if (allText.length < 20000) allText += " " + pageText;
-    if (pageTexts.length < 20 && pageText.trim().length > 50) { var pt2 = pageText.trim().slice(0,6000); pt2 = pt2.slice(0, pt2.lastIndexOf(' ')+1) || pt2; pageTexts.push({ url: pageUrl, text: pt2 }); }
+    if (pageTexts.length < 20 && pageText.trim().length > 50) {
+      var pt2 = pageText.trim().slice(0,6000); pt2 = pt2.slice(0, pt2.lastIndexOf(' ')+1) || pt2;
+      pageTexts.push({ url: pageUrl, text: pt2 });
+    }
 
     exImages(html, pageUrl).forEach(function(img) {
       if (!imgMap.has(img.url)) imgMap.set(img.url, img);

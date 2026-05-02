@@ -950,20 +950,28 @@ async function crawlSite(entryUrl) {
     if (!html) { console.warn("No HTML for", pageUrl); continue; }
     html = sanitiseHtml(html);
 
-    // After first page, update origin to handle www redirects
-    // Check canonical link or og:url in the page
+    // After first page, detect www redirect and update origin
     if (visited.size === 1) {
-      var canonMatch = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i) ||
-                       html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i);
+      var canonMatch = html.match(/rel=["']canonical["'][^>]+href=["']([^"']+)["']/i) ||
+                       html.match(/href=["']([^"']+)["'][^>]+rel=["']canonical["']/i) ||
+                       html.match(/property=["']og:url["'][^>]+content=["']([^"']+)["']/i) ||
+                       html.match(/content=["']([^"']+)["'][^>]+property=["']og:url["']/i);
       if (canonMatch && canonMatch[1]) {
         try {
           var canonOrigin = new URL(canonMatch[1]).origin;
           if (canonOrigin !== origin) {
-            console.log("Origin redirect detected:", origin, "->", canonOrigin);
+            console.log("www redirect:", origin, "->", canonOrigin);
             origin = canonOrigin;
-            // Re-add entry URL with correct origin
-            var correctedEntry = canonOrigin + new URL(pageUrl).pathname;
-            if (!visited.has(correctedEntry)) queue.unshift(correctedEntry);
+            // Re-queue pages with correct origin
+            var newQueue = [];
+            queue.forEach(function(p) {
+              var corrected = p.replace(/^https?:\/\/[^/]+/, canonOrigin);
+              if (!visited.has(corrected) && !queued.has(corrected)) {
+                newQueue.push(corrected);
+                queued.add(corrected);
+              }
+            });
+            queue = newQueue;
           }
         } catch(e) {}
       }
@@ -1048,11 +1056,13 @@ function analyzeImages(imgData) {
 async function chkLink(url) {
   try {
     var text = await proxyFetch(url);
-    if (!text) return { url: url, status: "broken" };
+    // If proxy can't fetch it, mark unknown (not broken) — 
+    // many valid links block proxies (booking systems, socials etc.)
+    if (!text) return { url: url, status: "unknown" };
 
-    // Detect soft 404s — only flag if a strong 404 indicator appears near the top of the page
-    // (within first 2000 chars) to avoid false positives from footer/nav text
-    var top = text.slice(0, 2000).toLowerCase();
+    // Detect soft 404s — only flag if a very strong 404 phrase appears
+    // in a heading-level position (first 1000 chars of content)
+    var top = text.slice(0, 1000).toLowerCase();
     var soft404 = (
       top.includes("page not found") ||
       top.includes("404 - ") ||
@@ -1063,6 +1073,7 @@ async function chkLink(url) {
     );
     return { url: url, status: soft404 ? "broken" : "ok" };
   } catch(e) {
+    // On error mark as unknown, not broken
     return { url: url, status: "unknown" };
   }
 }
@@ -1628,11 +1639,22 @@ function buildBody(r, id) {
   h += "</div>";
 
   h += "<div id=\"tl-" + id + "\" class=\"tab-panel\">";
-  if (!lnks.length) { h += "<div class=\"state-msg state-mute\">No links found.</div>"; }
-  else {
-    lnks.forEach(function(l) {
-      var cls = l.status === "ok" ? "lp-ok" : l.status === "broken" ? "lp-broken" : "lp-unknown";
-      var lbl = l.status === "ok" ? "OK" : l.status === "broken" ? "BROKEN" : "?";
+  var brokenLnks = lnks.filter(function(l) { return l.status === "broken"; });
+  var okLnks = lnks.filter(function(l) { return l.status === "ok"; });
+  if (!lnks.length) {
+    h += "<div class=\"state-msg state-mute\">No links found.</div>";
+  } else if (!brokenLnks.length) {
+    h += "<div class=\"state-msg state-ok\">No broken links found.</div>";
+    okLnks.slice(0, 20).forEach(function(l) {
+      var foundOn = l.foundOn ? l.foundOn.replace(/^https?:\/\/[^\/]+/, "") || "/" : "";
+      h += "<div class=\"link-row\"><span class=\"link-pill lp-ok\">OK</span><div class=\"link-info\"><span class=\"link-href\">" + esc(l.url) + "</span>" + (foundOn ? "<span class=\"link-found-on\">Found on: " + esc(foundOn) + "</span>" : "") + "</div></div>";
+    });
+  } else {
+    // Show broken first, then ok
+    brokenLnks.concat(okLnks).forEach(function(l) {
+      if (l.status === "unknown") return; // skip unknown — proxy may have failed
+      var cls = l.status === "ok" ? "lp-ok" : "lp-broken";
+      var lbl = l.status === "ok" ? "OK" : "BROKEN";
       var foundOn = l.foundOn ? l.foundOn.replace(/^https?:\/\/[^\/]+/, "") || "/" : "";
       h += "<div class=\"link-row\"><span class=\"link-pill " + cls + "\">" + lbl + "</span><div class=\"link-info\"><span class=\"link-href\">" + esc(l.url) + "</span>" + (foundOn ? "<span class=\"link-found-on\">Found on: " + esc(foundOn) + "</span>" : "") + "</div></div>";
     });

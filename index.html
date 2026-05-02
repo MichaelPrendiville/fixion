@@ -876,6 +876,19 @@ async function crawlSite(entryUrl) {
     }
   } catch(e) { console.log("No sitemap found"); }
 
+  // If sitemap didn't add pages, try common hospitality page paths as fallback
+  var commonPaths = [
+    "/about", "/about-us", "/rooms", "/accommodation", "/dining", "/eat-drink",
+    "/eat", "/drink", "/menu", "/menus", "/functions", "/events", "/weddings",
+    "/wedding", "/conference", "/conferences", "/contact", "/contact-us",
+    "/packages", "/offers", "/gallery", "/facilities", "/spa", "/bar",
+    "/restaurant", "/whats-on", "/what-s-on", "/specials", "/gift-cards"
+  ];
+  commonPaths.forEach(function(path) {
+    var u = origin + path;
+    if (!queue.includes(u) && !visited.has(u)) queue.push(u);
+  });
+
   while (queue.length > 0 && visited.size < MAX_PAGES) {
     var pageUrl = queue.shift();
     if (visited.has(pageUrl)) continue;

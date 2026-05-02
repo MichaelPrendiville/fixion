@@ -598,7 +598,7 @@ var PROXIES = [
   {
     name: "worker",
     go: function(url) {
-      return fetchWithTimeout(WORKER_URL + "?url=" + encodeURIComponent(url), 14000)
+      return fetchWithTimeout(WORKER_URL + "?url=" + encodeURIComponent(url), 20000)
         .then(function(r) { if (!r.ok) throw new Error("status " + r.status); return r.text(); });
     }
   },
@@ -939,8 +939,9 @@ async function crawlSite(entryUrl) {
     try { path = new URL(pageUrl).pathname || "/"; } catch(e) {}
     updateCrawlStatus("Crawling page " + visited.size + ": " + path);
 
+    lastGoodProxy = 0; // always try Worker first for each page
     var html = await proxyFetch(pageUrl);
-    if (!html) continue;
+    if (!html) { console.warn("No HTML for", pageUrl); continue; }
     html = sanitiseHtml(html);
 
     var pageText = exText(html);

@@ -979,7 +979,7 @@ async function crawlSite(entryUrl) {
 
     var pageText = exText(html);
     if (allText.length < 20000) allText += " " + pageText;
-    if (pageTexts.length < 8 && pageText.trim().length > 50) { var pt2 = pageText.trim().slice(0,6000); pt2 = pt2.slice(0, pt2.lastIndexOf(' ')+1) || pt2; pageTexts.push({ url: pageUrl, text: pt2 }); }
+    if (pageTexts.length < 20 && pageText.trim().length > 50) { var pt2 = pageText.trim().slice(0,6000); pt2 = pt2.slice(0, pt2.lastIndexOf(' ')+1) || pt2; pageTexts.push({ url: pageUrl, text: pt2 }); }
 
     exImages(html, pageUrl).forEach(function(img) {
       if (!imgMap.has(img.url)) imgMap.set(img.url, img);

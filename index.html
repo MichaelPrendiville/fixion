@@ -516,7 +516,7 @@ footer{
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-var MAX_PAGES  = 10;
+var MAX_PAGES  = 20;
 var MAX_PDFS   = 20;
 var WORKER_URL = "https://damp-star-da32.michael-d15.workers.dev";
 var API_URL    = WORKER_URL || "https://api.anthropic.com/v1/messages";
@@ -939,7 +939,6 @@ async function crawlSite(entryUrl) {
     try { path = new URL(pageUrl).pathname || "/"; } catch(e) {}
     updateCrawlStatus("Crawling page " + visited.size + ": " + path);
 
-    if (visited.size > 1) await sleep(800); // small delay to avoid rate limiting
     var html = await proxyFetch(pageUrl);
     if (!html) continue;
     html = sanitiseHtml(html);

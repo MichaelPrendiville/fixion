@@ -860,6 +860,22 @@ async function crawlSite(entryUrl) {
   var allText  = "";
   var pageTexts = []; // [{url, text}]
 
+  // Try fetching sitemap.xml to discover pages — more reliable than link crawling
+  try {
+    var sitemapUrl = origin + "/sitemap.xml";
+    var sitemapHtml = await proxyFetch(sitemapUrl);
+    if (sitemapHtml && sitemapHtml.includes("<loc>")) {
+      var locMatches = sitemapHtml.match(/<loc>([^<]+)<\/loc>/g) || [];
+      locMatches.forEach(function(loc) {
+        var u = loc.replace(/<\/?loc>/g, "").trim();
+        if (u.startsWith(origin) && !u.toLowerCase().includes(".pdf") && !u.includes("#")) {
+          if (!queue.includes(u)) queue.push(u);
+        }
+      });
+      console.log("Sitemap found:", locMatches.length, "URLs");
+    }
+  } catch(e) { console.log("No sitemap found"); }
+
   while (queue.length > 0 && visited.size < MAX_PAGES) {
     var pageUrl = queue.shift();
     if (visited.has(pageUrl)) continue;
@@ -869,6 +885,7 @@ async function crawlSite(entryUrl) {
     try { path = new URL(pageUrl).pathname || "/"; } catch(e) {}
     updateCrawlStatus("Crawling page " + visited.size + ": " + path);
 
+    if (visited.size > 1) await sleep(800); // small delay to avoid rate limiting
     var html = await proxyFetch(pageUrl);
     if (!html) continue;
     html = sanitiseHtml(html);

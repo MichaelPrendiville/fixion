@@ -779,8 +779,9 @@ function exSameOriginLinks(html, base) {
   var d = document.createElement("div");
   d.innerHTML = html;
   var s = new Set();
-  d.querySelectorAll("a[href]").forEach(function(a) {
-    var n = normUrl(base, a.getAttribute("href"));
+
+  function addUrl(href) {
+    var n = normUrl(base, href);
     if (!n) return;
     try {
       var u = new URL(n);
@@ -788,7 +789,25 @@ function exSameOriginLinks(html, base) {
         s.add(u.origin + u.pathname + u.search);
       }
     } catch(e) {}
+  }
+
+  // Standard anchor links
+  d.querySelectorAll("a[href]").forEach(function(a) { addUrl(a.getAttribute("href")); });
+
+  // Links in data attributes (e.g. data-href, data-url, data-link)
+  d.querySelectorAll("[data-href],[data-url],[data-link],[data-path]").forEach(function(el) {
+    addUrl(el.getAttribute("data-href") || el.getAttribute("data-url") || el.getAttribute("data-link") || el.getAttribute("data-path"));
   });
+
+  // Extract paths from inline scripts that look like internal URLs
+  var scriptMatches = html.match(/["'](\/[a-z0-9\-_\/]+)["']/g) || [];
+  scriptMatches.forEach(function(m) {
+    var path = m.replace(/["']/g, "");
+    if (path.length > 1 && path.length < 100 && !path.includes(".") && !path.includes(" ")) {
+      addUrl(path);
+    }
+  });
+
   return Array.from(s);
 }
 
@@ -875,19 +894,6 @@ async function crawlSite(entryUrl) {
       console.log("Sitemap found:", locMatches.length, "URLs");
     }
   } catch(e) { console.log("No sitemap found"); }
-
-  // If sitemap didn't add pages, try common hospitality page paths as fallback
-  var commonPaths = [
-    "/about", "/about-us", "/rooms", "/accommodation", "/dining", "/eat-drink",
-    "/eat", "/drink", "/menu", "/menus", "/functions", "/events", "/weddings",
-    "/wedding", "/conference", "/conferences", "/contact", "/contact-us",
-    "/packages", "/offers", "/gallery", "/facilities", "/spa", "/bar",
-    "/restaurant", "/whats-on", "/what-s-on", "/specials", "/gift-cards"
-  ];
-  commonPaths.forEach(function(path) {
-    var u = origin + path;
-    if (!queue.includes(u) && !visited.has(u)) queue.push(u);
-  });
 
   while (queue.length > 0 && visited.size < MAX_PAGES) {
     var pageUrl = queue.shift();

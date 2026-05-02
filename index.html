@@ -605,14 +605,14 @@ var PROXIES = [
   {
     name: "corsproxy.io",
     go: function(url) {
-      return fetchWithTimeout("https://corsproxy.io/?" + encodeURIComponent(url), 14000)
+      return fetchWithTimeout("https://corsproxy.io/?" + encodeURIComponent(url), 20000)
         .then(function(r) { if (!r.ok) throw new Error("status " + r.status); return r.text(); });
     }
   },
   {
     name: "codetabs",
     go: function(url) {
-      return fetchWithTimeout("https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(url), 14000)
+      return fetchWithTimeout("https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(url), 20000)
         .then(function(r) { if (!r.ok) throw new Error("status " + r.status); return r.text(); });
     }
   },
@@ -883,6 +883,7 @@ async function crawlSite(entryUrl) {
   var normOrigin = function(o) { return o.replace(/^(https?:\/\/)www\./, "$1"); };
   var visited  = new Set();
   var queue    = [entryUrl];
+  var queued   = new Set([entryUrl]); // O(1) duplicate check
   var allPdfs  = new Map();
   var imgMap   = new Map();
   var linkMap  = new Map(); // url → page it was found on
@@ -901,7 +902,7 @@ async function crawlSite(entryUrl) {
           (robotsSitemap.match(/<loc>([^<]+)<\/loc>/g) || []).forEach(function(loc) {
             var u = loc.replace(/<\/?loc>/g, "").trim();
             if (u.startsWith(origin) && !u.toLowerCase().includes(".pdf") && !u.includes("#")) {
-              if (!queue.includes(u)) queue.push(u);
+              if (!queued.has(u)) { queue.push(u); queued.add(u); }
             }
           });
           console.log("robots.txt sitemap found:", queue.length, "URLs");
@@ -925,7 +926,7 @@ async function crawlSite(entryUrl) {
           (sm.match(/<loc>([^<]+)<\/loc>/g) || []).forEach(function(loc) {
             var u = loc.replace(/<\/?loc>/g, "").trim();
             if (u.startsWith(origin) && !u.toLowerCase().includes(".pdf") && !u.includes("#")) {
-              if (!queue.includes(u)) queue.push(u);
+              if (!queued.has(u)) { queue.push(u); queued.add(u); }
             }
           });
           console.log("Sitemap found at", sitemapUrls[si], ":", queue.length, "URLs");
@@ -949,8 +950,27 @@ async function crawlSite(entryUrl) {
     if (!html) { console.warn("No HTML for", pageUrl); continue; }
     html = sanitiseHtml(html);
 
+    // After first page, update origin to handle www redirects
+    // Check canonical link or og:url in the page
+    if (visited.size === 1) {
+      var canonMatch = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i) ||
+                       html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i);
+      if (canonMatch && canonMatch[1]) {
+        try {
+          var canonOrigin = new URL(canonMatch[1]).origin;
+          if (canonOrigin !== origin) {
+            console.log("Origin redirect detected:", origin, "->", canonOrigin);
+            origin = canonOrigin;
+            // Re-add entry URL with correct origin
+            var correctedEntry = canonOrigin + new URL(pageUrl).pathname;
+            if (!visited.has(correctedEntry)) queue.unshift(correctedEntry);
+          }
+        } catch(e) {}
+      }
+    }
+
     var pageText = exText(html);
-    if (allText.length < 8000) allText += " " + pageText;
+    if (allText.length < 20000) allText += " " + pageText;
     if (pageTexts.length < 8 && pageText.trim().length > 50) { var pt2 = pageText.trim().slice(0,6000); pt2 = pt2.slice(0, pt2.lastIndexOf(' ')+1) || pt2; pageTexts.push({ url: pageUrl, text: pt2 }); }
 
     exImages(html, pageUrl).forEach(function(img) {
@@ -968,7 +988,7 @@ async function crawlSite(entryUrl) {
     exAllLinks(html, pageUrl).forEach(function(l) { if (!linkMap.has(l)) linkMap.set(l, pageUrl); });
 
     exSameOriginLinks(html, pageUrl).forEach(function(p) {
-      if (!visited.has(p) && !queue.includes(p)) queue.push(p);
+      if (!visited.has(p) && !queued.has(p)) { queue.push(p); queued.add(p); }
     });
   }
 
@@ -978,7 +998,7 @@ async function crawlSite(entryUrl) {
     pageTexts: pageTexts,
     images: Array.from(imgMap.values()).slice(0, 30),
     pdfs:   Array.from(allPdfs.entries()).map(function(e) { return { url: e[0], label: e[1] }; }).slice(0, MAX_PDFS),
-    links:  Array.from(linkMap.entries()).slice(0, 30).map(function(e) { return { url: e[0], foundOn: e[1] }; })
+    links:  Array.from(linkMap.entries()).slice(0, 100).map(function(e) { return { url: e[0], foundOn: e[1] }; })
   };
 }
 
